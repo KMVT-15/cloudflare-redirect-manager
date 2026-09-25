@@ -26,3 +26,32 @@ npm run dev
 ```
 
 The app has no login, so deploy it somewhere only staff can reach.
+
+## Deployment
+
+Runs on `kmvt-automation-server` at `http://redirects.kmvt.net` (tailnet only — the
+hostname resolves to the server's Tailscale address, so there is no TLS and no
+public exposure).
+
+| | |
+|---|---|
+| Repository | `/root/redirect-switcher` |
+| Service | `redirect-switcher.service`, listening on `127.0.0.1:3001` |
+| Proxy | second `server` block in `/etc/nginx/sites-available/default` |
+
+### Redeploying
+
+**Do not run `npm run build` on the server.** It has 2 GB of RAM, no swap, and
+shares the box with Bitfocus Companion; a build there exhausts memory and takes
+the whole machine down. Build here and ship the output instead:
+
+```
+npm run build
+COPYFILE_DISABLE=1 tar --no-xattrs -czf - .next app lib package.json package-lock.json \
+  | ssh root@kmvt-automation-server 'tar xzf - -C /root/redirect-switcher'
+ssh root@kmvt-automation-server 'cd /root/redirect-switcher && npm ci --omit=dev && systemctl restart redirect-switcher'
+```
+
+`npm ci --omit=dev` installs only what `next start` needs, which is cheap enough
+to run on the server. The service is capped at `MemoryMax=400M` so it cannot
+starve Companion; it normally sits around 88 MB.
