@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { DEFAULT_TARGET, normalizeUrl } from "@/lib/url";
 
 type Redirect = {
   requestUrl: string;
@@ -30,6 +31,15 @@ export default function Home() {
     }
   }
 
+  function tidy() {
+    if (!draft.trim()) return;
+    try {
+      setDraft(normalizeUrl(draft));
+    } catch (error) {
+      setMessage({ text: error instanceof Error ? error.message : "", ok: false });
+    }
+  }
+
   async function save(event: React.FormEvent) {
     event.preventDefault();
     setSaving(true);
@@ -38,7 +48,7 @@ export default function Home() {
     const response = await fetch("/api/redirect", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ targetUrl: draft.trim() }),
+      body: JSON.stringify({ targetUrl: draft }),
     });
     const data = await response.json();
 
@@ -59,16 +69,12 @@ export default function Home() {
     <main className="mx-auto flex min-h-screen max-w-xl flex-col justify-center gap-6 p-6">
       <header>
         <h1 className="text-2xl font-semibold">Live stream redirect</h1>
-        <p className="text-sm opacity-70">
-          Choose where kmvt15.org/live sends viewers.
-        </p>
+        <p className="text-sm opacity-70">Choose where kmvt15.org/live sends viewers.</p>
       </header>
 
       <section className="rounded-lg border border-black/10 p-4 dark:border-white/15">
         <h2 className="text-xs font-medium uppercase tracking-wide opacity-60">Currently pointing to</h2>
-        <p className="mt-2 break-all font-mono text-sm">
-          {redirect ? redirect.targetUrl : "Loading…"}
-        </p>
+        <p className="mt-2 break-all font-mono text-sm">{redirect ? redirect.targetUrl : "Loading…"}</p>
         {redirect && (
           <p className="mt-3 text-xs opacity-60">
             {redirect.requestUrl} · {redirect.statusCode} redirect
@@ -82,14 +88,33 @@ export default function Home() {
         </label>
         <input
           id="target"
-          type="url"
+          type="text"
+          inputMode="url"
+          autoComplete="off"
+          spellCheck={false}
           value={draft}
-          onChange={(event) => setDraft(event.target.value)}
-          placeholder="https://www.youtube.com/@KMVT15/streams"
-          required
+          onChange={(event) => {
+            setDraft(event.target.value);
+            setMessage(null);
+          }}
+          onBlur={tidy}
+          placeholder="youtube.com/watch?v=…"
           disabled={!redirect}
           className="rounded-md border border-black/15 bg-transparent px-3 py-2 font-mono text-sm outline-none focus:border-blue-500 disabled:opacity-50 dark:border-white/20"
         />
+
+        <button
+          type="button"
+          onClick={() => {
+            setDraft(DEFAULT_TARGET);
+            setMessage(null);
+          }}
+          disabled={!redirect || draft === DEFAULT_TARGET}
+          className="self-start text-xs underline underline-offset-2 opacity-70 hover:opacity-100 disabled:no-underline disabled:opacity-40"
+        >
+          Use the channel&rsquo;s streams page
+        </button>
+
         <button
           type="submit"
           disabled={saving || unchanged}
@@ -100,9 +125,7 @@ export default function Home() {
       </form>
 
       {message && (
-        <p className={`text-sm ${message.ok ? "text-green-600" : "text-red-600"}`}>
-          {message.text}
-        </p>
+        <p className={`text-sm ${message.ok ? "text-green-600" : "text-red-600"}`}>{message.text}</p>
       )}
     </main>
   );

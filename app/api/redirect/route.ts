@@ -1,29 +1,32 @@
 import { NextResponse } from "next/server";
 import { getRedirect, setRedirect } from "@/lib/cloudflare";
+import { normalizeUrl } from "@/lib/url";
 
-function fail(error: unknown) {
-  const message = error instanceof Error ? error.message : "Something went wrong";
-  return NextResponse.json({ error: message }, { status: 500 });
+function message(error: unknown) {
+  return error instanceof Error ? error.message : "Something went wrong";
 }
 
 export async function GET() {
   try {
     return NextResponse.json(await getRedirect());
   } catch (error) {
-    return fail(error);
+    return NextResponse.json({ error: message(error) }, { status: 500 });
   }
 }
 
 export async function PUT(request: Request) {
   const { targetUrl } = await request.json();
 
-  if (!URL.canParse(targetUrl) || !/^https?:$/.test(new URL(targetUrl).protocol)) {
-    return NextResponse.json({ error: "Enter a full URL starting with http:// or https://" }, { status: 400 });
+  let normalized;
+  try {
+    normalized = normalizeUrl(String(targetUrl ?? ""));
+  } catch (error) {
+    return NextResponse.json({ error: message(error) }, { status: 400 });
   }
 
   try {
-    return NextResponse.json(await setRedirect(targetUrl));
+    return NextResponse.json(await setRedirect(normalized));
   } catch (error) {
-    return fail(error);
+    return NextResponse.json({ error: message(error) }, { status: 500 });
   }
 }
