@@ -1,14 +1,13 @@
 # Redirect Switcher
 
-A one-page tool for changing where `kmvt15.org/live` redirects to.
+A one-page tool for managing the wildcard redirect rules on the `kmvt15.org`
+Cloudflare zone. Each redirect is a card: enter a path like `/live` and where it
+should send visitors. New redirects are created as 302s; editing one keeps
+whatever status code it already had.
 
-It reads and updates a single Cloudflare redirect rule:
-
-| | |
-|---|---|
-| Request URL | `http*://kmvt15.org/live` |
-| Target URL | whatever you set in the app |
-| Status code | 302 |
+The app only touches rules shaped like `http*://<domain>/<path>`. Rules matching
+on anything else — such as the `pro.kmvt15.org` host redirect — are left alone
+and are not listed, so they cannot be edited or deleted from here.
 
 ## Setup
 
@@ -16,7 +15,6 @@ Copy `.env.example` to `.env.local` and fill it in:
 
 - `CLOUDFLARE_API_TOKEN` — a token with **Zone → Config Rules → Edit** on the kmvt15.org zone
 - `CLOUDFLARE_ZONE_ID` — found on the zone's Overview page in the Cloudflare dashboard
-- `CLOUDFLARE_RULE_ID` — optional; without it the app picks the redirect rule whose expression mentions `/live`
 
 Then:
 

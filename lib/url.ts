@@ -1,7 +1,5 @@
 const SCHEME = /^([a-z][a-z0-9+.-]*):\/\//i;
 
-export const DEFAULT_TARGET = "https://www.youtube.com/@KMVT15/streams";
-
 export function normalizeUrl(input: string) {
   const cleaned = input.trim().replace(/^[<"']+|[>"']+$/g, "").trim();
   if (!cleaned) throw new Error("Enter a web address");
@@ -27,4 +25,15 @@ export function normalizeUrl(input: string) {
 
   const bareDomain = url.pathname === "/" && !url.search && !url.hash;
   return bareDomain ? `${url.protocol}//${url.host}` : url.href;
+}
+
+export function normalizePath(input: string) {
+  const cleaned = input.trim();
+  if (!cleaned) throw new Error("Enter a path like /live");
+  if (/\s/.test(cleaned)) throw new Error("Paths can't contain spaces");
+  if (cleaned.includes("://")) throw new Error("Enter just the path, like /live, not a whole address");
+
+  const path = "/" + cleaned.replace(/^\/+/, "").replace(/\/+$/, "");
+  if (path === "/") throw new Error("Enter a path like /live — redirecting the whole site isn't allowed here");
+  return path;
 }

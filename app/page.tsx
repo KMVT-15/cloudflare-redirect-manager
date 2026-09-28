@@ -1,132 +1,182 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { DEFAULT_TARGET, normalizeUrl } from "@/lib/url";
+import type { Redirect } from "@/lib/cloudflare";
+import { normalizePath, normalizeUrl } from "@/lib/url";
 
-type Redirect = {
-  requestUrl: string;
-  targetUrl: string;
-  statusCode: number;
-};
+type Data = { domain: string; redirects: Redirect[] };
+
+const message = (error: unknown) => (error instanceof Error ? error.message : "Something went wrong");
 
 export default function Home() {
-  const [redirect, setRedirect] = useState<Redirect | null>(null);
-  const [draft, setDraft] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState<{ text: string; ok: boolean } | null>(null);
+  const [data, setData] = useState<Data | null>(null);
+  const [drafting, setDrafting] = useState(false);
+  const [error, setError] = useState("");
 
   useEffect(() => {
-    load();
+    send("/api/redirects", "GET").catch((problem) => setError(message(problem)));
   }, []);
 
-  async function load() {
-    const response = await fetch("/api/redirect");
-    const data = await response.json();
-
-    if (response.ok) {
-      setRedirect(data);
-      setDraft(data.targetUrl);
-    } else {
-      setMessage({ text: data.error, ok: false });
-    }
-  }
-
-  function tidy() {
-    if (!draft.trim()) return;
-    try {
-      setDraft(normalizeUrl(draft));
-    } catch (error) {
-      setMessage({ text: error instanceof Error ? error.message : "", ok: false });
-    }
-  }
-
-  async function save(event: React.FormEvent) {
-    event.preventDefault();
-    setSaving(true);
-    setMessage(null);
-
-    const response = await fetch("/api/redirect", {
-      method: "PUT",
+  async function send(url: string, method: string, body?: object) {
+    const response = await fetch(url, {
+      method,
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ targetUrl: draft }),
+      body: body && JSON.stringify(body),
     });
-    const data = await response.json();
-
-    if (response.ok) {
-      setRedirect(data);
-      setDraft(data.targetUrl);
-      setMessage({ text: "Redirect updated", ok: true });
-    } else {
-      setMessage({ text: data.error, ok: false });
-    }
-
-    setSaving(false);
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.error);
+    setData(payload);
   }
-
-  const unchanged = !redirect || draft.trim() === redirect.targetUrl;
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-xl flex-col justify-center gap-6 p-6">
+    <main className="mx-auto flex min-h-screen w-full max-w-xl flex-col gap-5 p-6 sm:justify-center">
       <header>
-        <h1 className="text-2xl font-semibold">Live stream redirect</h1>
-        <p className="text-sm opacity-70">Choose where kmvt15.org/live sends viewers.</p>
+        <h1 className="text-2xl font-semibold">Redirects</h1>
+        <p className="text-sm opacity-70">
+          Choose where short links on {data ? data.domain : "your site"} send visitors.
+        </p>
       </header>
 
-      <section className="rounded-lg border border-black/10 p-4 dark:border-white/15">
-        <h2 className="text-xs font-medium uppercase tracking-wide opacity-60">Currently pointing to</h2>
-        <p className="mt-2 break-all font-mono text-sm">{redirect ? redirect.targetUrl : "Loading…"}</p>
-        {redirect && (
-          <p className="mt-3 text-xs opacity-60">
-            {redirect.requestUrl} · {redirect.statusCode} redirect
-          </p>
-        )}
-      </section>
+      {!data && !error && <p className="text-sm opacity-60">Loading…</p>}
+      {error && <p className="text-sm text-red-600">{error}</p>}
 
-      <form onSubmit={save} className="flex flex-col gap-3">
-        <label htmlFor="target" className="text-sm font-medium">
-          New destination
-        </label>
-        <input
-          id="target"
-          type="text"
-          inputMode="url"
-          autoComplete="off"
-          spellCheck={false}
-          value={draft}
-          onChange={(event) => {
-            setDraft(event.target.value);
-            setMessage(null);
-          }}
-          onBlur={tidy}
-          placeholder="youtube.com/watch?v=…"
-          disabled={!redirect}
-          className="rounded-md border border-black/15 bg-transparent px-3 py-2 font-mono text-sm outline-none focus:border-blue-500 disabled:opacity-50 dark:border-white/20"
+      {data?.redirects.map((redirect) => (
+        <Card
+          key={redirect.id}
+          domain={data.domain}
+          redirect={redirect}
+          onSave={(body) => send(`/api/redirects/${redirect.id}`, "PUT", body)}
+          onDelete={() => send(`/api/redirects/${redirect.id}`, "DELETE")}
         />
+      ))}
 
-        <button
-          type="button"
-          onClick={() => {
-            setDraft(DEFAULT_TARGET);
-            setMessage(null);
+      {drafting && data && (
+        <Card
+          domain={data.domain}
+          onSave={async (body) => {
+            await send("/api/redirects", "POST", body);
+            setDrafting(false);
           }}
-          disabled={!redirect || draft === DEFAULT_TARGET}
-          className="self-start text-xs underline underline-offset-2 opacity-70 hover:opacity-100 disabled:no-underline disabled:opacity-40"
-        >
-          Use the channel&rsquo;s streams page
-        </button>
+          onCancel={() => setDrafting(false)}
+        />
+      )}
 
+      {data && !drafting && (
         <button
-          type="submit"
-          disabled={saving || unchanged}
-          className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-700 disabled:opacity-40"
+          onClick={() => setDrafting(true)}
+          className="self-start rounded-md border border-dashed border-black/25 px-4 py-2 text-sm transition hover:border-blue-500 hover:text-blue-600 dark:border-white/25"
         >
-          {saving ? "Saving…" : "Update redirect"}
+          + New redirect
         </button>
-      </form>
-
-      {message && (
-        <p className={`text-sm ${message.ok ? "text-green-600" : "text-red-600"}`}>{message.text}</p>
       )}
     </main>
+  );
+}
+
+type CardProps = {
+  domain: string;
+  redirect?: Redirect;
+  onSave: (body: { path: string; targetUrl: string }) => Promise<void>;
+  onDelete?: () => Promise<void>;
+  onCancel?: () => void;
+};
+
+function Card({ domain, redirect, onSave, onDelete, onCancel }: CardProps) {
+  const [path, setPath] = useState(redirect?.path ?? "");
+  const [targetUrl, setTargetUrl] = useState(redirect?.targetUrl ?? "");
+  const [busy, setBusy] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+  const [problem, setProblem] = useState("");
+
+  const isNew = !redirect;
+  const changed = isNew || path !== redirect.path || targetUrl !== redirect.targetUrl;
+
+  function tidy(value: string, clean: (input: string) => string, apply: (result: string) => void) {
+    if (!value.trim()) return;
+    try {
+      apply(clean(value));
+      setProblem("");
+    } catch (error) {
+      setProblem(message(error));
+    }
+  }
+
+  async function run(action: () => Promise<void>) {
+    setBusy(true);
+    setProblem("");
+    try {
+      await action();
+    } catch (error) {
+      setProblem(message(error));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const field =
+    "min-w-0 rounded-md border border-black/15 bg-transparent px-2 py-1 font-mono text-sm outline-none focus:border-blue-500 dark:border-white/20";
+
+  return (
+    <form
+      onSubmit={(event) => {
+        event.preventDefault();
+        run(() => onSave({ path, targetUrl }));
+      }}
+      className="flex flex-col gap-3 rounded-lg border border-black/10 p-4 dark:border-white/15"
+    >
+      <div className="flex items-center gap-1 font-mono text-sm">
+        <span className="shrink-0 opacity-60">{domain}</span>
+        <input
+          value={path}
+          onChange={(event) => setPath(event.target.value)}
+          onBlur={() => tidy(path, normalizePath, setPath)}
+          placeholder="/live"
+          autoFocus={isNew}
+          spellCheck={false}
+          className={`${field} flex-1`}
+        />
+        <span className="shrink-0 text-xs opacity-50">{redirect?.statusCode ?? 302}</span>
+      </div>
+
+      <label className="flex flex-col gap-1 text-xs opacity-60">
+        Sends visitors to
+        <input
+          value={targetUrl}
+          onChange={(event) => setTargetUrl(event.target.value)}
+          onBlur={() => tidy(targetUrl, normalizeUrl, setTargetUrl)}
+          placeholder="youtube.com/@KMVT15/streams"
+          spellCheck={false}
+          className={`${field} text-black opacity-100 dark:text-white`}
+        />
+      </label>
+
+      <div className="flex items-center gap-3">
+        <button
+          type="submit"
+          disabled={busy || !changed}
+          className="rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-blue-700 disabled:opacity-40"
+        >
+          {busy ? "Saving…" : isNew ? "Create" : "Save"}
+        </button>
+
+        {isNew ? (
+          <button type="button" onClick={onCancel} className="text-sm opacity-70 hover:opacity-100">
+            Cancel
+          </button>
+        ) : (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => (confirming ? run(onDelete!) : setConfirming(true))}
+            onBlur={() => setConfirming(false)}
+            className="ml-auto text-sm text-red-600 hover:underline disabled:opacity-40"
+          >
+            {confirming ? "Really delete?" : "Delete"}
+          </button>
+        )}
+      </div>
+
+      {problem && <p className="text-sm text-red-600">{problem}</p>}
+    </form>
   );
 }

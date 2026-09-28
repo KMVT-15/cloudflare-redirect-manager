@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Live stream redirect",
-  description: "Change where kmvt15.org/live points.",
+  title: "Redirects",
+  description: "Choose where short links send visitors.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
